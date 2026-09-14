@@ -6,38 +6,30 @@
 
 ## 下载
 
-- [插件安装包 v1.0.0](https://github.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/releases/download/v1.0.0/answer-read-aloud-1.0.0.zip)
-- [ChatRaw 主程序兼容补丁](https://github.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/releases/download/v1.0.0/chatraw-host-read-aloud.patch)
-- [SHA-256 校验文件](https://github.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/releases/download/v1.0.0/SHA256SUMS)
+- [插件安装包 v1.0.1](https://github.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/releases/download/v1.0.1/answer-read-aloud-1.0.1.zip)
+- [SHA-256 校验文件](https://github.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/releases/download/v1.0.1/SHA256SUMS)
 - [全部版本](https://github.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/releases)
 
 ## 安装
 
-### 1. 检查主程序兼容性
+### 1. 升级旧版本
 
-**安装 ZIP 之前先处理这一步。** 插件依赖主程序提供 `ChatRawPlugin.onCleanup`，用于停用、重载、卸载时停止播放和清理监听器。没有该接口的旧版 ChatRaw 无法运行本插件。
+**v1.0.1 可以直接安装到原版 ChatRaw，无需修改主程序或应用补丁。** 已在上游 `b910c45d32c37b2f7cd0e5155163368f25baf6e9` 原版和带 `onCleanup` 的宿主上验证。
 
-本仓库同时提供主程序补丁，基于 [massif-01/ChatRaw 的 b910c45](https://github.com/massif-01/ChatRaw/commit/b910c45d32c37b2f7cd0e5155163368f25baf6e9)。补丁仅修改三个前端文件：增加清理接口，移除重复的 `init()` 调用，并更新编译后的 JS 和资源版本号。
+如果 v1.0.0 打开设置一直显示 `Loading...`，请下载本页的 v1.0.1 安装包，通过「本地安装」重新上传覆盖，刷新页面后确认插件版本为 **1.0.1**，并启用插件再打开设置。原有服务端密钥会保留；原版宿主重新上传 ZIP 会重置插件选项，升级后请重新确认地域、音色和倍速。
 
-将补丁下载到 ChatRaw 源码根目录，在该目录运行：
+v1.0.0 错误地依赖主程序新增的清理接口；v1.0.1 取消了这一依赖，并处理原版主程序重复加载脚本与设置容器延迟挂载的情况。已经应用旧补丁的主程序也可以继续使用。
 
-```sh
-git apply --check chatraw-host-read-aloud.patch
-git apply chatraw-host-read-aloud.patch
-```
-
-然后按原有方式重新部署或重启 ChatRaw，并刷新页面。补丁已包含编译后的 JS，无需额外运行前端构建。
-
-若检查失败，先核对主程序版本或本地修改，不要强行覆盖。若主程序已经包含清理接口与初始化修复，无需重复应用。此插件面向本仓库标明的 ChatRaw 前端插件架构，不保证适配其他同名分支或 Module / Companion Plugin 架构。
+此插件面向 ChatRaw 前端插件架构，不保证适配其他同名分支或 Module / Companion Plugin 架构。宿主仍需提供插件 SDK、消息操作插槽和密钥代理接口。
 
 ### 2. 安装插件
 
-打开 ChatRaw → **插件 → 本地安装**，上传下载的 `answer-read-aloud-1.0.0.zip`。
+打开 ChatRaw → **插件 → 本地安装**，上传下载的 `answer-read-aloud-1.0.1.zip`。
 
 也可使用支持源地址安装的 ChatRaw 版本，从下面的公开目录安装：
 
 ```text
-https://raw.githubusercontent.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/v1.0.0
+https://raw.githubusercontent.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/v1.0.1
 ```
 
 ### 3. 配置并试听
@@ -57,7 +49,7 @@ https://raw.githubusercontent.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/v1.0.0
 - 合成过程中再次点击按钮可取消等待。
 - 长回答按句子优先分段，顺序合成与播放，避免超出单次输入限制。
 - 当前页面缓存最多 100 段未过期的音频地址，重复朗读可减少重复合成。
-- 同时只播放一条回答；切换对话、修改正在朗读的回答、停用插件时停止。
+- 同时只播放一条回答；切换对话、修改正在朗读的回答、停用插件时停止。原版宿主的生命周期检查间隔最多 500ms。
 - 音色：Cherry / Serena / Ethan；语言：自动 / 中文 / 英文；播放倍速：0.75–2 倍。
 - 中英文设置界面，支持手机布局。
 
@@ -83,8 +75,8 @@ https://raw.githubusercontent.com/wowalxa2-tech/ChatRaw-AnswerReadAloud/v1.0.0
 python3 scripts/build_release.py
 ```
 
-生成的安装包、主程序补丁和校验文件位于 `dist/`。插件本身不需要新增 Python 后端依赖。
+生成的安装包和校验文件位于 `dist/`。插件本身不需要新增 Python 后端依赖。
 
 ## 许可与上游
 
-[MIT License](LICENSE)。主程序兼容补丁来源于 [ChatRaw](https://github.com/massif-01/ChatRaw)，保留其许可证及版权声明。
+[MIT License](LICENSE)。适配 [ChatRaw](https://github.com/massif-01/ChatRaw)，保留其许可证及版权声明。

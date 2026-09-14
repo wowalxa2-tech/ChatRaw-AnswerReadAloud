@@ -1,10 +1,12 @@
 /** Answer Read Aloud — Aliyun Model Studio Qwen-TTS. MIT license. */
 (function (ChatRaw) {
     'use strict';
-    if (!ChatRaw?.onCleanup) {
-        console.error('[AnswerReadAloud] Update ChatRaw to a version with onCleanup support.');
+    if (!ChatRaw?.utils || !ChatRaw?.settings) {
+        console.error('[AnswerReadAloud] ChatRaw plugin SDK is unavailable.');
         return;
     }
+    // Older hosts can execute plugin scripts twice during startup. Own one runtime.
+    window._chatrawAnswerReadAloudPlugin?.destroy();
     const ID = 'answer-read-aloud';
     const SERVICE = 'aliyun-qwen-tts';
     const DEFAULTS = { region: 'beijing', voice: 'Cherry', language: 'Auto', speed: '1' };
@@ -45,6 +47,7 @@
     let disposed = false;
     let active = null;
     let settingsController = null;
+    let pendingSettings = false;
     let settings = { ...DEFAULTS, ...ChatRaw.settings(ID) };
     const cache = new Map(); // Expiring signed URLs, memory-only, at most 100 chunks.
     const controls = new Map();
@@ -206,8 +209,21 @@
         const message = messageAt(slot);
         if (message?.role === 'assistant') start(message.content, slot, message.content);
     }
+    function suspend() {
+        stop(); cache.clear();
+        for (const [slot, { wrap }] of controls) {
+            slot.parentElement?.classList.remove('answer-read-aloud-actions');
+            wrap.remove();
+        }
+        controls.clear();
+    }
     function scan() {
         if (disposed) return;
+        const app = appState();
+        const plugin = app?.installedPlugins?.find(p => p.id === ID);
+        if (Array.isArray(app?.installedPlugins) && !plugin) { destroy(); return; }
+        renderPendingSettings();
+        if (plugin?.enabled === false) { suspend(); return; }
         if (active && (ChatRaw.utils.getCurrentChatId() !== active.chatId || (active.slot &&
             (!active.slot.isConnected || messageAt(active.slot)?.content !== active.content)))) stop();
         for (const [slot] of controls) if (!slot.isConnected) controls.delete(slot);
@@ -236,14 +252,34 @@
         paint();
     }
 
-    function appState() { return document.querySelector('[x-data]')?._x_dataStack?.[0]; }
-    async function openSettings(event) {
+    function appState() {
+        const root = document.querySelector('[x-data]');
+        return root?._x_dataStack?.[0] || root?.__x?.$data;
+    }
+    function requestSettings(event) {
         if (event.detail?.pluginId !== ID) return;
+        pendingSettings = true;
+        renderPendingSettings();
+    }
+    function renderPendingSettings() {
+        if (!pendingSettings || disposed) return;
+        const app = appState();
+        if (!app?.showPluginSettings || app.currentPluginSettings?.id !== ID) {
+            pendingSettings = false;
+            return;
+        }
+        // The host event and Alpine's x-if mount need not happen in the same frame.
+        const area = document.getElementById('plugin-custom-settings-area');
+        if (!area) return;
+        pendingSettings = false;
+        openSettings(area).catch(error => {
+            if (!disposed && area.isConnected) area.textContent = error.message || t('error');
+        });
+    }
+    async function openSettings(area) {
         settingsController?.abort();
         settingsController = new AbortController();
         const signal = settingsController.signal;
-        const area = document.getElementById('plugin-custom-settings-area');
-        if (!area) return;
         area.replaceChildren();
         const form = document.createElement('form');
         form.className = 'answer-read-aloud-settings';
@@ -320,21 +356,25 @@
     style.textContent = '.answer-read-aloud-actions{opacity:1}.answer-read-aloud-controls{display:inline-flex;align-items:center;gap:4px}.answer-read-aloud-controls [hidden]{display:none!important}.answer-read-aloud-settings{padding:24px;display:flex;flex-direction:column;gap:14px;max-height:70vh;overflow:auto}.answer-read-aloud-settings p{font-size:13px;color:var(--text-secondary);line-height:1.6;margin:0}.answer-read-aloud-settings label{display:flex;flex-direction:column;gap:6px;font-size:14px}.answer-read-aloud-settings input,.answer-read-aloud-settings select{width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-primary);color:var(--text-primary)}.answer-read-aloud-footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}';
     document.head.appendChild(style);
     const observer = new MutationObserver(scan);
-    observer.observe(document.querySelector('.messages') || document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-msg-index'] });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-msg-index'] });
     // Chat changes can preserve identical DOM nodes; check the host chat identity as well.
     const timer = setInterval(scan, 500);
-    window.addEventListener('plugin-settings-open', openSettings);
+    window.addEventListener('plugin-settings-open', requestSettings);
     window.addEventListener('pagehide', stop);
-    ChatRaw.onCleanup(() => {
-        disposed = true; stop(); observer.disconnect(); clearInterval(timer);
+    function destroy() {
+        if (disposed) return;
+        disposed = true; suspend(); observer.disconnect(); clearInterval(timer);
         settingsController?.abort(); cache.clear();
-        window.removeEventListener('plugin-settings-open', openSettings);
+        window.removeEventListener('plugin-settings-open', requestSettings);
         window.removeEventListener('pagehide', stop);
-        for (const [slot, { wrap }] of controls) {
-            slot.parentElement?.classList.remove('answer-read-aloud-actions');
-            wrap.remove();
-        }
-        controls.clear(); style.remove();
-    });
+        style.remove();
+        if (window._chatrawAnswerReadAloudPlugin === runtime) delete window._chatrawAnswerReadAloudPlugin;
+    }
+    const runtime = { destroy };
+    window._chatrawAnswerReadAloudPlugin = runtime;
+    // New hosts stop synchronously. Original hosts are monitored by scan() (<=500ms).
+    // Keep the settings listener while disabled; replacement/uninstall destroys it.
+    ChatRaw.onCleanup?.(suspend);
+    if (appState()?.showPluginSettings && appState()?.currentPluginSettings?.id === ID) pendingSettings = true;
     scan();
 })(window.ChatRawPlugin);

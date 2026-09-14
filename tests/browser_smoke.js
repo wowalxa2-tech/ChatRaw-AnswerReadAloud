@@ -1,6 +1,7 @@
 // Run against an isolated ChatRaw test instance using playwright-cli run-code.
 // No real cloud requests or speech: the upstream and WAV audio are fixtures.
 async (page) => {
+    await page.waitForLoadState('networkidle');
     await page.evaluate(() => {
         const app = document.querySelector('[x-data]')._x_dataStack[0];
         app.lang = 'zh'; app.showPlugins = false; app.showPluginSettings = false;
@@ -12,15 +13,15 @@ async (page) => {
     const requests = [];
     const results = [];
     let mode = 'ok';
-    let release;
     await page.route('https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/**', route => route.fulfill({
         status: 200, contentType: 'audio/wav', path: 'output/playwright/read-aloud-silence.wav'
     }));
     await page.route('**/api/proxy/request', async route => {
         const body = route.request().postDataJSON();
         requests.push(body);
-        if (mode === 'delay') await new Promise(resolve => { release = resolve; });
-        if (mode === 'error') return route.fulfill({ status: 401, json: { success: false, error: { message: 'InvalidApiKey (test fixture)' } } });
+        const requestMode = mode;
+        if (requestMode === 'delay') await page.waitForTimeout(500);
+        if (requestMode === 'error') return route.fulfill({ status: 401, json: { success: false, error: { message: 'InvalidApiKey (test fixture)' } } });
         await route.fulfill({ json: { success: true, data: { output: { audio: {
             url: `http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/qa/${requests.length}.wav`,
             expires_at: Math.floor(Date.now() / 1000) + 3600
@@ -36,7 +37,7 @@ async (page) => {
         window.__ttsNativeAudio = NativeAudio;
         window.Audio = function () { const audio = new NativeAudio(); window.__ttsAudio.push(audio); return audio; };
     });
-    await page.waitForFunction(() => document.querySelectorAll('.answer-read-aloud-controls').length === 2);
+    await page.waitForFunction(() => document.querySelectorAll('[aria-label="朗读（AI 合成语音）"]').length === 2);
     check(await read().count() === 2, 'Exactly one read button per assistant answer');
     await read().first().click(); await pause().waitFor();
     check(requests.length === 1 && requests[0].body.model === 'qwen3-tts-flash', 'Uses Qwen-TTS request contract');
@@ -58,8 +59,8 @@ async (page) => {
     await page.evaluate(() => { document.querySelector('[x-data]')._x_dataStack[0].messages[2].content = '延迟合成测试'; });
     await read().last().click(); await page.getByRole('button', { name: '正在合成，点击取消', exact: true }).waitFor();
     await page.getByRole('button', { name: '正在合成，点击取消', exact: true }).click();
-    release(); mode = 'ok';
-    await page.waitForTimeout(200);
+    mode = 'ok';
+    await page.waitForTimeout(600);
     check(await page.evaluate(() => window.__ttsAudio.every(a => a.paused)), 'Canceled synthesis never starts late playback');
     mode = 'error';
     await read().last().click(); await page.getByText('InvalidApiKey (test fixture)', { exact: true }).waitFor();
@@ -81,6 +82,7 @@ async (page) => {
         const app = document.querySelector('[x-data]')._x_dataStack[0];
         await app.togglePlugin(app.installedPlugins.find(p => p.id === 'answer-read-aloud'));
     });
+    await page.waitForFunction(() => document.querySelectorAll('.answer-read-aloud-controls').length === 0);
     check(await page.locator('.answer-read-aloud-controls').count() === 0 && await page.evaluate(() => window.__ttsAudio.every(a => a.paused)), 'Disable removes controls and stops audio');
     await page.evaluate(async () => {
         const app = document.querySelector('[x-data]')._x_dataStack[0];

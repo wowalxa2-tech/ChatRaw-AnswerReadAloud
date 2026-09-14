@@ -1,7 +1,6 @@
 """Build a deterministic, installable plugin ZIP and public release assets."""
 import hashlib
 import json
-import shutil
 import zipfile
 from pathlib import Path
 
@@ -16,10 +15,7 @@ with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o100644 << 16
         bundle.writestr(info, (ROOT / name).read_bytes())
-patch = DIST / 'chatraw-host-read-aloud.patch'
-shutil.copyfile(ROOT / 'compat' / patch.name, patch)
-(DIST / 'SHA256SUMS').write_text(''.join(
-    f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n'
-    for path in (archive, patch)
-))
-print(f'Built {archive.name}, {patch.name}, SHA256SUMS')
+(DIST / 'SHA256SUMS').write_text(
+    f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n'
+)
+print(f'Built {archive.name}, SHA256SUMS')
