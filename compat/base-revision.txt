@@ -1,0 +1,2 @@
+ChatRaw upstream: https://github.com/massif-01/ChatRaw
+Base commit: b910c45d32c37b2f7cd0e5155163368f25baf6e9
